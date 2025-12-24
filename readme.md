@@ -1,8 +1,9 @@
 # ImagesGallery
 
-使用php写的图片展示。存储图片的公链，然后展示出来，并且能右键复制公链，附带随机图片api
+使用php写的图片展示。存储图片的公链，然后展示出来，附带随机图片api
 
-演示：https://t.ziworld.top/
+演示：旧版https://t.ziworld.top/index-v1.php
+      v2 https://t.ziworld.top/
 
 #  食用
 
@@ -57,4 +58,5 @@ $default_category = 'PC'; // 默认分类
 优化了界面和加载速度，增添收藏等功能
 
 ![image-20250808173039465](assets/Snipaste_2025-12-22_00-17-27.png)
+
 
