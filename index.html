@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery - Ziworld</title>
+    <meta name="keywords" content="ziworld, gallery, 原神, 风景, 高清壁纸, 4K图片, 摄影作品" />
+    <meta name="description" content="Ziworld 提供随机图片视频api。">
+    <link rel="icon" href="https://previewengine.zoho.com.cn/image/WD/4oaq4d7abd3071f9341fab351574baff84fc8" sizes="32x32" type="image/png">
+    <script>
+      // 立即执行主题检查
+      (function() {
+        try {
+          var savedTheme = localStorage.getItem('mediaflow_theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "vite-plugin-static-copy": "https://esm.sh/vite-plugin-static-copy@^3.1.6"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
