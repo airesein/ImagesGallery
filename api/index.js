@@ -14,6 +14,10 @@ const axiom = new Axiom({ token: process.env.AXIOM_TOKEN });
 
 export default async function handler(req, res) {
   // CORS 和 仅允许 GET
+  const token = process.env.AXIOM_TOKEN || '';
+  console.log('DEBUG: AXIOM_TOKEN:', token.substring(0, 5) + '...');
+  console.log('DEBUG: AXIOM_DATASET:', process.env.AXIOM_DATASET);
+  
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method Not Allowed' });
