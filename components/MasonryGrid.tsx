@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MediaItem, AppConfig } from '../types';
 import { Card } from './HeroUI';
 
 interface MasonryGridProps {
   items: MediaItem[];
-  favorites: Set<string>; // Set of URLs
+  favorites: Set<string>;
   config: AppConfig;
   onItemClick: (item: MediaItem) => void;
   onCopy: (text: string) => void;
@@ -13,7 +13,41 @@ interface MasonryGridProps {
   onDownload: (item: MediaItem) => void;
 }
 
-// Helper: Extract ZID from URL
+// --- Video State Manager Hook ---
+const useVideoManager = () => {
+  const [activeIds, setActiveIds] = useState<string[]>([]); // Max 4 playing
+  const [cachedIds, setCachedIds] = useState<string[]>([]); // Max 20 in DOM
+
+  const requestPlay = useCallback((id: string) => {
+    setActiveIds(prev => {
+      // If already playing, move to end (mark as most recently used)
+      if (prev.includes(id)) {
+        return [...prev.filter(pid => pid !== id), id];
+      }
+      // Add new, limit to 4
+      const newList = [...prev, id];
+      return newList.slice(-4); 
+    });
+
+    setCachedIds(prev => {
+      // Add to cache, limit to 20
+      // We filter out the id first to move it to the end (LRU policy)
+      const withoutId = prev.filter(cid => cid !== id);
+      const newList = [...withoutId, id];
+      return newList.slice(-20);
+    });
+  }, []);
+
+  const notifyOutOfView = useCallback((id: string) => {
+    setActiveIds(prev => prev.filter(pid => pid !== id));
+    // Note: We do NOT remove from cachedIds here. 
+    // It stays in DOM (paused) until pushed out by new videos.
+  }, []);
+
+  return { activeIds, cachedIds, requestPlay, notifyOutOfView };
+};
+
+// --- Helper ---
 const getZidFromUrl = (url: string): string => {
   const parts = url.split('/');
   return parts[parts.length - 1] || '';
@@ -30,8 +64,9 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
   onDownload
 }) => {
   const [columns, setColumns] = useState<MediaItem[][]>([]);
+  const { activeIds, cachedIds, requestPlay, notifyOutOfView } = useVideoManager();
   
-  // Calculate columns based on width and scale
+  // Calculate columns
   useEffect(() => {
     const calculateColumns = () => {
       const width = window.innerWidth;
@@ -67,7 +102,10 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
                key={item.id} 
                item={item} 
                isFavorite={favorites.has(item.url)}
-               config={config}
+               shouldPlay={activeIds.includes(item.id)}
+               shouldCache={cachedIds.includes(item.id)}
+               onRequestPlay={() => requestPlay(item.id)}
+               onOutOfView={() => notifyOutOfView(item.id)}
                onItemClick={onItemClick}
                onCopy={onCopy}
                onOpenNew={onOpenNew}
@@ -84,41 +122,74 @@ export const MasonryGrid: React.FC<MasonryGridProps> = ({
 const MasonryItem: React.FC<{
   item: MediaItem;
   isFavorite: boolean;
-  config: AppConfig;
+  shouldPlay: boolean;
+  shouldCache: boolean;
+  onRequestPlay: () => void;
+  onOutOfView: () => void;
   onItemClick: (item: MediaItem) => void;
   onCopy: (text: string) => void;
   onOpenNew: (url: string) => void;
   onToggleFavorite: (item: MediaItem) => void;
   onDownload: (item: MediaItem) => void;
-}> = ({ item, isFavorite, onItemClick, onCopy, onOpenNew, onToggleFavorite, onDownload }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const hoverTimeoutRef = useRef<number | null>(null);
+}> = ({ 
+  item, 
+  isFavorite, 
+  shouldPlay, 
+  shouldCache, 
+  onRequestPlay, 
+  onOutOfView, 
+  onItemClick, 
+  onCopy, 
+  onOpenNew, 
+  onToggleFavorite, 
+  onDownload 
+}) => {
+  const [isImgLoaded, setIsImgLoaded] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Construct thumbnail URL for videos
   const thumbnailUrl = item.type === 'video' 
     ? `https://previewengine.zoho.com.cn/thumbnail/WD/${getZidFromUrl(item.url)}`
     : item.url;
 
-  const handleMouseEnter = () => {
-    if (item.type === 'video') {
-      // Small delay before playing to prevent flashing on quick scroll
-      hoverTimeoutRef.current = window.setTimeout(() => {
-        setIsPlaying(true);
-      }, 200); 
-    }
-  };
+  // Intersection Observer for Auto-Pause
+  useEffect(() => {
+    if (item.type !== 'video' || !containerRef.current) return;
 
-  const handleMouseLeave = () => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting && shouldPlay) {
+          onOutOfView();
+        }
+      },
+      { threshold: 0.1 } // Trigger when 10% visible
+    );
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [item.type, shouldPlay, onOutOfView]);
+
+  // Handle Play/Pause side effects based on props
+  useEffect(() => {
+    if (item.type !== 'video' || !videoRef.current) return;
+
+    if (shouldPlay) {
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          // Auto-play was prevented
+          console.debug("Autoplay prevented", error);
+        });
+      }
+    } else {
+      videoRef.current.pause();
     }
-    setIsPlaying(false);
-  };
+  }, [shouldPlay, item.type]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Middle click
-    if (e.button === 1) {
+    if (e.button === 1) { // Middle click
       e.preventDefault();
       onDownload(item);
     }
@@ -130,11 +201,17 @@ const MasonryItem: React.FC<{
         e.preventDefault();
         onOpenNew(item.url);
       } else {
-        // If it's a video and not playing yet (mobile tap), play it first
-        if (item.type === 'video' && !isPlaying && window.innerWidth < 768) {
-             setIsPlaying(true);
+        if (item.type === 'video') {
+            if (!shouldPlay) {
+                // If clicked and not playing, request play
+                setIsLoadingVideo(true);
+                onRequestPlay();
+            } else {
+                // If already playing, open detail view
+                onItemClick(item);
+            }
         } else {
-             onItemClick(item);
+            onItemClick(item);
         }
       }
     }
@@ -149,6 +226,22 @@ const MasonryItem: React.FC<{
     }
   };
 
+  // Video Event Handlers
+  const handleVideoLoadedData = () => {
+    setIsVideoReady(true);
+    // If we have enough data to render a frame, we might still be buffering for smooth playback,
+    // but we can show the video element now.
+  };
+
+  const handleVideoWaiting = () => {
+    if (shouldPlay) setIsLoadingVideo(true);
+  };
+
+  const handleVideoPlaying = () => {
+    setIsLoadingVideo(false);
+    setIsVideoReady(true);
+  };
+
   return (
     <Card 
       isPressable={false} 
@@ -156,11 +249,10 @@ const MasonryItem: React.FC<{
       onClick={handleClick}
     >
       <div 
+        ref={containerRef}
         className="relative w-full h-full"
         onContextMenu={handleContextMenu}
         onMouseDown={handleMouseDown}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
       >
         {isFavorite && (
           <div className="absolute top-2 left-2 z-20 text-yellow-400 drop-shadow-md">
@@ -168,56 +260,69 @@ const MasonryItem: React.FC<{
           </div>
         )}
 
-        {/* 
-            Resource Optimization Strategy:
-            1. Always show the Image (Thumbnail for video).
-            2. Only inject <video> tag when isPlaying is true (hover/click).
-            3. The Image sits behind the video to prevent layout shift.
-        */}
-
-        {/* Thumbnail / Image Layer */}
+        {/* Thumbnail Layer */}
         <img 
             src={thumbnailUrl} 
             alt={item.id} 
             loading="lazy"
             decoding="async" 
-            onLoad={() => setIsLoaded(true)}
+            onLoad={() => setIsImgLoaded(true)}
             className={`
               w-full h-auto object-cover block transition-opacity duration-300
-              ${isLoaded ? 'opacity-100' : 'opacity-0'}
+              ${isImgLoaded ? 'opacity-100' : 'opacity-0'}
             `}
-            style={{ 
-                willChange: 'opacity',
-                // Keep image visible behind video to prevent flashing
-            }}
+            style={{ willChange: 'opacity' }}
           />
 
-        {/* Video Layer - Only renders when active */}
-        {item.type === 'video' && isPlaying && (
-            <div className="absolute inset-0 z-10 bg-black">
+        {/* Video Layer */}
+        {item.type === 'video' && shouldCache && (
+            <div className="absolute inset-0 z-10 bg-transparent">
                  <video 
+                   ref={videoRef}
                    src={item.url} 
-                   className="w-full h-full object-cover block animate-fade-in"
-                   autoPlay
-                   muted
+                   className={`
+                     w-full h-full object-cover block transition-opacity duration-500 ease-in-out
+                     ${isVideoReady ? 'opacity-100' : 'opacity-0'}
+                   `}
                    loop
-                   playsInline
-                   // No preload since we only render on interaction
+                   muted // Required for reliable autoplay
+                   playsInline // Critical for iOS
+                   webkit-playsinline="true"
+                   controls={false}
+                   onLoadedData={handleVideoLoadedData}
+                   onWaiting={handleVideoWaiting}
+                   onPlaying={handleVideoPlaying}
                  />
             </div>
         )}
 
-        {/* Video Indicator */}
-        {item.type === 'video' && (
-             <div className="absolute top-2 right-2 bg-black/60 px-2 py-0.5 rounded text-xs text-white z-10 pointer-events-none">
+        {/* Loading / Buffering Progress Bar */}
+        {item.type === 'video' && shouldPlay && isLoadingVideo && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-content3 z-30 overflow-hidden">
+                <div className="h-full bg-primary animate-[loading_1s_ease-in-out_infinite] w-full origin-left" />
+            </div>
+        )}
+
+        {/* Video Type Indicator (Show if video not cached OR cached but not ready) */}
+        {item.type === 'video' && (!shouldCache || (shouldCache && !isVideoReady)) && (
+             <div className="absolute top-2 right-2 bg-black/60 px-2 py-0.5 rounded text-xs text-white z-10 pointer-events-none transition-opacity duration-300">
                 视频
              </div>
         )}
         
-        {!isLoaded && <div className="absolute inset-0 bg-content2 z-[-1]" />}
+        {!isImgLoaded && <div className="absolute inset-0 bg-content2 z-[-1]" />}
 
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none z-10" />
+        {/* Hover Overlay */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none z-20" />
       </div>
+      
+      <style>{`
+        @keyframes loading {
+          0% { transform: scaleX(0); opacity: 0.5; }
+          50% { transform: scaleX(0.5); opacity: 1; }
+          100% { transform: scaleX(1); opacity: 0; margin-left: 100%; }
+        }
+      `}</style>
     </Card>
   );
 };

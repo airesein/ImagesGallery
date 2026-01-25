@@ -150,6 +150,7 @@ const App: React.FC = () => {
   // Scroll Reset
   useEffect(() => {
     if (mainScrollRef.current) {
+      // Direct jump, no smooth scrolling to avoid loading intermediate images
       mainScrollRef.current.scrollTop = 0;
     }
   }, [selectedCategory]);
@@ -328,7 +329,8 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main 
         ref={mainScrollRef}
-        className="flex-1 h-full overflow-y-auto p-4 md:p-8 relative scroll-smooth bg-background"
+        // REMOVED 'scroll-smooth' to ensure instant scrolling to top
+        className="flex-1 h-full overflow-y-auto p-4 md:p-8 relative bg-background"
       >
         <div className="md:hidden sticky top-4 mx-4 mb-6 z-30 flex items-center justify-between p-2 pl-3 bg-content1/90 backdrop-blur-lg border border-divider rounded-full shadow-lg">
            <div className="flex items-center gap-3">
