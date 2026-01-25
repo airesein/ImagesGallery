@@ -1,6 +1,6 @@
 // 1. 使用 import 代替 require
 // Vercel 的打包器支持直接 import JSON 文件
-import db from '../date.json'; 
+import db from './date.json'; 
 
 export default function handler(req, res) {
   // CORS 设置

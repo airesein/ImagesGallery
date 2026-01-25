@@ -1,4 +1,4 @@
-# ZIWORLD Gallery
+# Images Gallery
 
 这是一个基于 React 和 HeroUI 风格构建的图片与视频展示网站。支持瀑布流布局、侧边栏分类导航、以及快捷键操作。
 
