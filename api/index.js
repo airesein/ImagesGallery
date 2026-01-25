@@ -1,9 +1,12 @@
-// 1. 使用 import 代替 require
-// Vercel 的打包器支持直接 import JSON 文件
-import db from './date.json'; 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// 1. 设置缓存变量，防止每次请求都读文件（提升性能）
+let cachedDb = null;
 
 export default function handler(req, res) {
-  // CORS 设置
+  // 允许跨域
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
@@ -12,17 +15,32 @@ export default function handler(req, res) {
   }
 
   try {
+    // 2. 读取数据 (绕过 import，直接读文本)
+    if (!cachedDb) {
+      // 获取当前文件的绝对路径 (兼容 ESM 模式)
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+      
+      // 拼接 json 文件路径
+      const filePath = path.join(__dirname, 'date.json');
+      
+      // 读取并解析
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      cachedDb = JSON.parse(fileContent);
+    }
+
+    // 3. 获取参数
     const { category, type } = req.query;
     
+    // 4. 解析目标分类
     let targetCategories = [];
     if (category) {
       targetCategories = category.split(',').map(c => c.trim()).filter(Boolean);
     }
 
+    // 5. 筛选逻辑
     let urlPool = [];
-    
-    // 遍历数据
-    for (const item of db) {
+    for (const item of cachedDb) {
       const isMatch = targetCategories.length === 0 || targetCategories.includes(item.category);
 
       if (isMatch && Array.isArray(item.zids)) {
@@ -32,6 +50,7 @@ export default function handler(req, res) {
       }
     }
 
+    // 6. 返回结果
     if (urlPool.length > 0) {
       const randomUrl = urlPool[Math.floor(Math.random() * urlPool.length)];
 
@@ -47,14 +66,17 @@ export default function handler(req, res) {
       }
     } else {
       res.status(404).json({ 
-        error: '未找到指定分类的图片', 
-        // 调试时可用，生产环境可移除
-        availableCategories: db.map(i => i.category) 
+        error: '未找到指定分类的资源', 
+        availableCategories: cachedDb.map(i => i.category) 
       });
     }
 
   } catch (error) {
     console.error('API Error:', error);
-    res.status(500).json({ error: 'Server Error' });
+    // 如果发生错误，返回详细信息以便调试
+    res.status(500).json({ 
+      error: 'Server Error', 
+      details: error.message 
+    });
   }
 }
