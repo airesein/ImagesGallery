@@ -136,6 +136,7 @@ const ActionBtn: React.FC<{ onClick: (e: React.MouseEvent) => void; icon: React.
           bg-content1/90 hover:bg-primary hover:text-white backdrop-blur-md 
           shadow-lg border border-divider transition-all duration-200
           text-sm font-medium whitespace-nowrap
+          text-[#0080FF]
         "
     >
         {icon}
